@@ -25,7 +25,9 @@ def index():
         col_sfwd = request.form['col_sfwd'].strip()
         incluir_pfwd = 'incluir_pfwd' in request.form
 
-        filepath = os.path.join(UPLOAD_FOLDER, file.filename)
+        # Armazena o nome original do arquivo
+        original_filename = file.filename
+        filepath = os.path.join(UPLOAD_FOLDER, original_filename)
         file.save(filepath)
 
         df = pd.read_excel(filepath)
@@ -87,7 +89,9 @@ def index():
                     df_result.at[i, 'gdu_acumulado_pfwd'] = ''
                 erros += 1
 
-        output_path = os.path.join(RESULT_FOLDER, 'resultado_gdu.xlsx')
+        # Usa o nome original do arquivo para o resultado
+        output_filename = original_filename
+        output_path = os.path.join(RESULT_FOLDER, output_filename)
         df_result.to_excel(output_path, index=False)
 
         # Determina a mensagem de status
@@ -106,11 +110,11 @@ def index():
                              download_ready=True, 
                              status_message=status_message, 
                              status_type=status_type,
-                             filename='resultado_gdu.xlsx')
+                             filename=output_filename)
 
     return render_template('index.html')
 
-@app.route('/download')
-def download():
-    output_path = os.path.join(RESULT_FOLDER, 'resultado_gdu.xlsx')
+@app.route('/download/<filename>')
+def download(filename):
+    output_path = os.path.join(RESULT_FOLDER, filename)
     return send_file(output_path, as_attachment=True)
