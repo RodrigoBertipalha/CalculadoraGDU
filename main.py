@@ -22,7 +22,9 @@ clima_df['data'] = pd.to_datetime(clima_df['data'])
 def index():
     if request.method == 'POST':
         file = request.files['file']
+        col_plantio = request.form['col_plantio'].strip()
         col_sfwd = request.form['col_sfwd'].strip()
+        col_pfwd = request.form['col_pfwd'].strip()
         incluir_pfwd = 'incluir_pfwd' in request.form
 
         # Armazena o nome original do arquivo
@@ -37,12 +39,12 @@ def index():
 
         for i, row in df.iterrows():
             try:
-                data_plantio = pd.to_datetime(row['Data de Plantio'], dayfirst=True, errors='coerce')
+                data_plantio = pd.to_datetime(row[col_plantio], dayfirst=True, errors='coerce')
                 data_sfwd = pd.to_datetime(row[col_sfwd], dayfirst=True, errors='coerce')
 
                 # Formata as datas originais para dd/mm/aaaa
                 if not pd.isna(data_plantio):
-                    df_result.at[i, 'Data de Plantio'] = data_plantio.strftime('%d/%m/%Y')
+                    df_result.at[i, col_plantio] = data_plantio.strftime('%d/%m/%Y')
                 if not pd.isna(data_sfwd):
                     df_result.at[i, col_sfwd] = data_sfwd.strftime('%d/%m/%Y')
 
@@ -61,11 +63,11 @@ def index():
                     linhas_validas += 1
 
                 if incluir_pfwd:
-                    data_pfwd = pd.to_datetime(row['06. PFWD'], dayfirst=True, errors='coerce')
+                    data_pfwd = pd.to_datetime(row[col_pfwd], dayfirst=True, errors='coerce')
                     
                     # Formata a data PFWD
                     if not pd.isna(data_pfwd):
-                        df_result.at[i, '06. PFWD'] = data_pfwd.strftime('%d/%m/%Y')
+                        df_result.at[i, col_pfwd] = data_pfwd.strftime('%d/%m/%Y')
 
                     if pd.isna(data_pfwd) or str(data_pfwd).upper() == "N/A":
                         df_result.at[i, 'dias_pfwd'] = ''

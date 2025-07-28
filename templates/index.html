@@ -1,40 +1,346 @@
+
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8">
   <title>Calculadora de GDU</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background-color: #f5f5f5;
+    }
+    
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    
+    .edit-columns-btn {
+      background-color: #6c757d;
+      color: white;
+      padding: 8px 15px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    
+    .edit-columns-btn:hover {
+      background-color: #5a6268;
+    }
+    
+    .gear-icon {
+      font-size: 14px;
+    }
+    
+    .upload-section {
+      background-color: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    
+    .preview-section {
+      background-color: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    
+    .column-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 15px 0;
+    }
+    
+    .column-table th, .column-table td {
+      border: 1px solid #ddd;
+      padding: 12px;
+      text-align: left;
+    }
+    
+    .column-table th {
+      background-color: #f8f9fa;
+      font-weight: bold;
+    }
+    
+    .checkbox-section {
+      margin: 15px 0;
+    }
+    
+    .calculate-btn {
+      background-color: #007bff;
+      color: white;
+      padding: 12px 30px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    
+    .calculate-btn:hover {
+      background-color: #0056b3;
+    }
+    
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.5);
+    }
+    
+    .modal-content {
+      background-color: white;
+      margin: 10% auto;
+      padding: 20px;
+      border-radius: 8px;
+      width: 80%;
+      max-width: 500px;
+    }
+    
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 10px;
+    }
+    
+    .close {
+      color: #aaa;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    
+    .close:hover {
+      color: black;
+    }
+    
+    .form-group {
+      margin-bottom: 15px;
+    }
+    
+    .form-group label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    
+    .form-group input {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    
+    .modal-buttons {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 20px;
+    }
+    
+    .save-btn {
+      background-color: #28a745;
+      color: white;
+      padding: 8px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    .cancel-btn {
+      background-color: #6c757d;
+      color: white;
+      padding: 8px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    .status-message {
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    
+    .status-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .status-warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+    .status-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    
+    .download-section {
+      background-color: #f0f8ff;
+      padding: 15px;
+      border: 1px solid #87ceeb;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    
+    .download-btn {
+      background-color: #4CAF50;
+      color: white;
+      padding: 10px 20px;
+      text-decoration: none;
+      border-radius: 4px;
+      display: inline-block;
+    }
+  </style>
 </head>
 <body>
-  <h2>Calculadora de GDU por Plot</h2>
+  <div class="header">
+    <h2>Calculadora de GDU por Plot</h2>
+    <button class="edit-columns-btn" onclick="openModal()">
+      <span class="gear-icon">⚙️</span>
+      Editar Nomes de Colunas
+    </button>
+  </div>
 
   {% if status_message %}
-    <p style="color:
-      {% if status_type == 'error' %}red
-      {% elif status_type == 'warning' %}orange
-      {% else %}green
-      {% endif %};">
+    <div class="status-message status-{{ status_type }}">
       {{ status_message }}
-    </p>
+    </div>
   {% endif %}
 
   {% if download_ready %}
-    <div style="background-color: #f0f8ff; padding: 15px; border: 1px solid #87ceeb; margin: 10px 0;">
+    <div class="download-section">
       <h3>Arquivo processado!</h3>
-      <p><a href="/download/{{ filename }}" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px;">📥 Baixar {{ filename }}</a></p>
+      <a href="/download/{{ filename }}" class="download-btn">📥 Baixar {{ filename }}</a>
     </div>
   {% endif %}
 
   <form method="POST" enctype="multipart/form-data">
-    <label>Arquivo do campo (.xlsx):</label><br>
-    <input type="file" name="file" required><br><br>
+    <div class="upload-section">
+      <label><strong>Arquivo do campo (.xlsx):</strong></label><br><br>
+      <input type="file" name="file" required>
+    </div>
 
-    <label>Nome da coluna de florescimento (ex: 05. SFWD ou SFWD):</label><br>
-    <input type="text" name="col_sfwd" value="05. SFWD" required><br><br>
+    <div class="preview-section">
+      <h3>Prévia das Colunas</h3>
+      <table class="column-table">
+        <thead>
+          <tr>
+            <th>Coluna</th>
+            <th>Nome Atual</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Data de Plantio</strong></td>
+            <td><span id="plantio-name">Data de Plantio</span></td>
+          </tr>
+          <tr>
+            <td><strong>Data de Florescimento (Fêmea)</strong></td>
+            <td><span id="sfwd-name">05. SFWD</span></td>
+          </tr>
+          <tr id="pfwd-row" style="display: none;">
+            <td><strong>Data de Florescimento (Macho)</strong></td>
+            <td><span id="pfwd-name">06. PFWD</span></td>
+          </tr>
+        </tbody>
+      </table>
 
-    <input type="checkbox" name="incluir_pfwd" id="incluir_pfwd">
-    <label for="incluir_pfwd">Calcular GDU do macho (06. PFWD)</label><br><br>
+      <div class="checkbox-section">
+        <input type="checkbox" name="incluir_pfwd" id="incluir_pfwd" onchange="togglePfwdRow()">
+        <label for="incluir_pfwd"><strong>Calcular GDU do macho (06. PFWD)</strong></label>
+      </div>
 
-    <input type="submit" value="Calcular GDU">
+      <input type="hidden" name="col_plantio" id="col_plantio" value="Data de Plantio">
+      <input type="hidden" name="col_sfwd" id="col_sfwd" value="05. SFWD">
+      <input type="hidden" name="col_pfwd" id="col_pfwd" value="06. PFWD">
+
+      <button type="submit" class="calculate-btn">Calcular GDU</button>
+    </div>
   </form>
+
+  <!-- Modal para editar nomes das colunas -->
+  <div id="editModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Editar Nomes das Colunas</h3>
+        <span class="close" onclick="closeModal()">&times;</span>
+      </div>
+      
+      <div class="form-group">
+        <label for="modal-plantio">Nome da coluna de Data de Plantio:</label>
+        <input type="text" id="modal-plantio" value="Data de Plantio">
+      </div>
+      
+      <div class="form-group">
+        <label for="modal-sfwd">Nome da coluna de Florescimento (Fêmea):</label>
+        <input type="text" id="modal-sfwd" value="05. SFWD">
+      </div>
+      
+      <div class="form-group">
+        <label for="modal-pfwd">Nome da coluna de Florescimento (Macho):</label>
+        <input type="text" id="modal-pfwd" value="06. PFWD">
+      </div>
+      
+      <div class="modal-buttons">
+        <button type="button" class="cancel-btn" onclick="closeModal()">Cancelar</button>
+        <button type="button" class="save-btn" onclick="saveColumns()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function openModal() {
+      document.getElementById('editModal').style.display = 'block';
+    }
+
+    function closeModal() {
+      document.getElementById('editModal').style.display = 'none';
+    }
+
+    function saveColumns() {
+      const plantio = document.getElementById('modal-plantio').value;
+      const sfwd = document.getElementById('modal-sfwd').value;
+      const pfwd = document.getElementById('modal-pfwd').value;
+
+      // Atualiza a tabela de prévia
+      document.getElementById('plantio-name').textContent = plantio;
+      document.getElementById('sfwd-name').textContent = sfwd;
+      document.getElementById('pfwd-name').textContent = pfwd;
+
+      // Atualiza os campos hidden do formulário
+      document.getElementById('col_plantio').value = plantio;
+      document.getElementById('col_sfwd').value = sfwd;
+      document.getElementById('col_pfwd').value = pfwd;
+
+      closeModal();
+    }
+
+    function togglePfwdRow() {
+      const checkbox = document.getElementById('incluir_pfwd');
+      const pfwdRow = document.getElementById('pfwd-row');
+      
+      if (checkbox.checked) {
+        pfwdRow.style.display = 'table-row';
+      } else {
+        pfwdRow.style.display = 'none';
+      }
+    }
+
+    // Fecha o modal se clicar fora dele
+    window.onclick = function(event) {
+      const modal = document.getElementById('editModal');
+      if (event.target === modal) {
+        closeModal();
+      }
+    }
+  </script>
 </body>
 </html>
