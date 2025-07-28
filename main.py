@@ -38,6 +38,12 @@ def index():
                 data_plantio = pd.to_datetime(row['Data de Plantio'], dayfirst=True, errors='coerce')
                 data_sfwd = pd.to_datetime(row[col_sfwd], dayfirst=True, errors='coerce')
 
+                # Formata as datas originais para dd/mm/aaaa
+                if not pd.isna(data_plantio):
+                    df_result.at[i, 'Data de Plantio'] = data_plantio.strftime('%d/%m/%Y')
+                if not pd.isna(data_sfwd):
+                    df_result.at[i, col_sfwd] = data_sfwd.strftime('%d/%m/%Y')
+
                 if pd.isna(data_plantio) or pd.isna(data_sfwd) or str(data_plantio).upper() == "N/A" or str(data_sfwd).upper() == "N/A":
                     df_result.at[i, 'dias'] = ''
                     df_result.at[i, 'gdu_acumulado'] = ''
@@ -54,6 +60,10 @@ def index():
 
                 if incluir_pfwd:
                     data_pfwd = pd.to_datetime(row['06. PFWD'], dayfirst=True, errors='coerce')
+                    
+                    # Formata a data PFWD
+                    if not pd.isna(data_pfwd):
+                        df_result.at[i, '06. PFWD'] = data_pfwd.strftime('%d/%m/%Y')
 
                     if pd.isna(data_pfwd) or str(data_pfwd).upper() == "N/A":
                         df_result.at[i, 'dias_pfwd'] = ''
