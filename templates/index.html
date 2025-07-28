@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Calculadora de GDU</title>
+</head>
+<body>
+  <h2>Upload da planilha e datas</h2>
+  <form method="POST" enctype="multipart/form-data">
+    <label>Arquivo CSV:</label>
+    <input type="file" name="file" required><br><br>
+
+    <label>Data de plantio (dd/mm/aaaa):</label>
+    <input type="text" name="plantio" required><br><br>
+
+    <label>Data de florescimento (dd/mm/aaaa):</label>
+    <input type="text" name="florescimento" required><br><br>
+
+    <input type="submit" value="Calcular GDU">
+  </form>
+</body>
+</html>
