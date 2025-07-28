@@ -5,16 +5,31 @@
   <title>Calculadora de GDU</title>
 </head>
 <body>
-  <h2>Upload da planilha e datas</h2>
+  <h2>Calculadora de GDU por Plot</h2>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <p style="color:
+          {% if category == 'error' %}red
+          {% elif category == 'warning' %}orange
+          {% else %}green
+          {% endif %};">
+          {{ message }}
+        </p>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
   <form method="POST" enctype="multipart/form-data">
-    <label>Arquivo CSV:</label>
+    <label>Arquivo do campo (.xlsx):</label><br>
     <input type="file" name="file" required><br><br>
 
-    <label>Data de plantio (dd/mm/aaaa):</label>
-    <input type="text" name="plantio" required><br><br>
+    <label>Nome da coluna de florescimento (ex: 05. SFWD ou SFWD):</label><br>
+    <input type="text" name="col_sfwd" value="05. SFWD" required><br><br>
 
-    <label>Data de florescimento (dd/mm/aaaa):</label>
-    <input type="text" name="florescimento" required><br><br>
+    <input type="checkbox" name="incluir_pfwd" id="incluir_pfwd">
+    <label for="incluir_pfwd">Calcular GDU do macho (06. PFWD)</label><br><br>
 
     <input type="submit" value="Calcular GDU">
   </form>
