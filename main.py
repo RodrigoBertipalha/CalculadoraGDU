@@ -80,13 +80,27 @@ def index():
         output_path = os.path.join(RESULT_FOLDER, 'resultado_gdu.xlsx')
         df_result.to_excel(output_path, index=False)
 
+        # Determina a mensagem de status
         if linhas_validas == 0:
-            flash('Erro: nenhuma linha pôde ser calculada.', 'error')
+            status_message = 'Erro: nenhuma linha pôde ser calculada.'
+            status_type = 'error'
         elif erros > 0:
-            flash('Cálculo realizado com alguns erros.', 'warning')
+            status_message = f'Cálculo realizado com alguns erros. {linhas_validas} linhas processadas com sucesso, {erros} com erro.'
+            status_type = 'warning'
         else:
-            flash('Cálculo realizado com sucesso!', 'success')
+            status_message = f'Cálculo realizado com sucesso! {linhas_validas} linhas processadas.'
+            status_type = 'success'
 
-        return send_file(output_path, as_attachment=True)
+        # Renderiza a página com o resultado e link para download
+        return render_template('index.html', 
+                             download_ready=True, 
+                             status_message=status_message, 
+                             status_type=status_type,
+                             filename='resultado_gdu.xlsx')
 
     return render_template('index.html')
+
+@app.route('/download')
+def download():
+    output_path = os.path.join(RESULT_FOLDER, 'resultado_gdu.xlsx')
+    return send_file(output_path, as_attachment=True)
