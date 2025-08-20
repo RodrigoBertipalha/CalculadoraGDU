@@ -1,7 +1,12 @@
-from flask import Flask, render_template, request, send_file, flash
+from flask import Flask, render_template, request, send_file, flash, after_this_request
 import pandas as pd
 import os
 import xlsxwriter
+import datetime
+import shutil
+import time
+import threading
+from pathlib import Path
 
 app = Flask(__name__)
 app.secret_key = 'segredo'
@@ -9,6 +14,43 @@ UPLOAD_FOLDER = 'uploads'
 RESULT_FOLDER = 'results'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(RESULT_FOLDER, exist_ok=True)
+
+# Função para limpar arquivos antigos
+def clean_old_files(directory, hours=1):
+    """Limpa arquivos mais antigos que o número de horas especificado"""
+    now = time.time()
+    cutoff_time = now - (hours * 3600)
+    
+    try:
+        for item in os.listdir(directory):
+            item_path = os.path.join(directory, item)
+            # Ignora o arquivo .gitkeep
+            if item == '.gitkeep':
+                continue
+                
+            if os.path.isfile(item_path):
+                # Verifica a última modificação do arquivo
+                if os.path.getmtime(item_path) < cutoff_time:
+                    try:
+                        os.remove(item_path)
+                        print(f"Arquivo removido: {item_path}")
+                    except Exception as e:
+                        print(f"Erro ao remover arquivo {item_path}: {e}")
+    except Exception as e:
+        print(f"Erro ao limpar diretório {directory}: {e}")
+
+# Configura a limpeza automática de arquivos a cada intervalo
+def schedule_cleanup(interval=3600):  # intervalo em segundos (1 hora)
+    """Agenda a limpeza periódica de arquivos"""
+    while True:
+        clean_old_files(UPLOAD_FOLDER)
+        clean_old_files(RESULT_FOLDER)
+        time.sleep(interval)
+
+# Inicia a thread de limpeza
+cleanup_thread = threading.Thread(target=schedule_cleanup)
+cleanup_thread.daemon = True  # Thread termina quando o programa principal termina
+cleanup_thread.start()
 
 # Base climática fixa
 clima_df = pd.read_excel(
@@ -220,6 +262,17 @@ def index():
                 status_message += f' ATENÇÃO: {total_gdu_alto} linhas com GDU acima de 1200.'
             status_type = 'success'
 
+        # Limpeza imediata dos arquivos de upload (não são mais necessários)
+        try:
+            for file in uploaded_files:
+                original_filename = file.filename
+                filepath = os.path.join(UPLOAD_FOLDER, original_filename)
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+                    print(f"Arquivo de upload removido: {filepath}")
+        except Exception as e:
+            print(f"Erro ao remover arquivos de upload: {e}")
+            
         # Renderiza a página com o resultado e links para download
         return render_template('index.html', 
                              download_ready=True, 
@@ -232,8 +285,52 @@ def index():
 @app.route('/download/<filename>')
 def download(filename):
     output_path = os.path.join(RESULT_FOLDER, filename)
+    
+    # Verificar se o arquivo existe
+    if not os.path.exists(output_path):
+        flash('Arquivo não encontrado. Ele pode ter sido removido automaticamente.', 'error')
+        return render_template('index.html', status_message='Arquivo não encontrado.', status_type='error')
+    
+    @after_this_request
+    def cleanup(response):
+        # Tentar excluir o arquivo após o download
+        # Às vezes o arquivo pode estar em uso, então tratamos a exceção
+        try:
+            # Aguarda um pouco para garantir que o download foi concluído
+            def remove_file():
+                time.sleep(5)  # Aguarda 5 segundos
+                if os.path.exists(output_path):
+                    try:
+                        os.remove(output_path)
+                        print(f"Arquivo removido após download: {output_path}")
+                    except Exception as e:
+                        print(f"Erro ao remover arquivo {output_path} após download: {e}")
+            
+            # Inicia uma thread para remover o arquivo
+            thread = threading.Thread(target=remove_file)
+            thread.daemon = True
+            thread.start()
+        except Exception as e:
+            print(f"Erro ao tentar configurar a limpeza do arquivo {output_path}: {e}")
+        return response
+    
     return send_file(output_path, as_attachment=True)
 
+# Função que limpa todos os arquivos nos diretórios (exceto .gitkeep)
+def clean_all_files():
+    """Limpa todos os arquivos temporários nos diretórios de upload e resultados"""
+    for directory in [UPLOAD_FOLDER, RESULT_FOLDER]:
+        for item in os.listdir(directory):
+            item_path = os.path.join(directory, item)
+            if os.path.isfile(item_path) and item != '.gitkeep':
+                try:
+                    os.remove(item_path)
+                    print(f"Arquivo removido durante inicialização: {item_path}")
+                except Exception as e:
+                    print(f"Erro ao remover arquivo {item_path}: {e}")
+
 if __name__ == '__main__':
+    # Limpa todos os arquivos temporários na inicialização
+    clean_all_files()
     print("Aplicação inicializada! Acesse http://localhost:5000 para usar a calculadora de GDU.")
     app.run(debug=True, port=5000)
