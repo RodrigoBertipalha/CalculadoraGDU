@@ -118,6 +118,18 @@
       font-size: 1.3em;
     }
     
+    .download-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 0 auto;
+      max-width: 500px;
+    }
+    
+    .download-item {
+      margin-bottom: 10px;
+    }
+    
     .download-btn {
       background: linear-gradient(135deg, #4caf50, #45a049);
       color: white;
@@ -474,11 +486,23 @@
       {% if download_ready %}
         <div class="download-section">
           <h3>✅ Processamento Concluído!</h3>
-          <p>Seu arquivo foi processado com sucesso e está pronto para download.</p>
+          <p>Seus arquivos foram processados e estão prontos para download.</p>
           <br>
-          <a href="/download/{{ filename }}" class="download-btn">
-            📥 Baixar {{ filename }}
+          {% if filenames|length == 1 %}
+          <a href="/download/{{ filenames[0] }}" class="download-btn">
+            📥 Baixar {{ filenames[0] }}
           </a>
+          {% else %}
+          <div class="download-list">
+            {% for filename in filenames %}
+            <div class="download-item">
+              <a href="/download/{{ filename }}" class="download-btn">
+                📥 Baixar {{ filename }}
+              </a>
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
         </div>
       {% endif %}
 
@@ -488,13 +512,13 @@
             <span class="section-icon">📄</span>
             Upload do Arquivo
           </h3>
-          <p>Selecione o arquivo Excel (.xlsx) contendo os dados do campo:</p>
+          <p>Selecione um ou mais arquivos Excel (.xlsx) contendo os dados do campo:</p>
           
           <div class="file-input-container">
-            <input type="file" name="file" class="file-input" required onchange="showFileName(this)">
+            <input type="file" name="files[]" class="file-input" multiple required onchange="showFileNames(this)">
             <label class="file-input-label">
               <span>📁</span>
-              Escolher Arquivo Excel
+              Escolher Arquivos Excel
             </label>
           </div>
           <div id="file-selected" class="file-selected" style="display: none;"></div>
@@ -522,18 +546,17 @@
                 <td class="column-name">🌸 Data de Florescimento (Fêmea)</td>
                 <td><span class="column-value" id="sfwd-name">05. SFWD</span></td>
               </tr>
-              <tr id="pfwd-row" style="display: none;">
+              <tr id="pfwd-row">
                 <td class="column-name">🌾 Data de Florescimento (Macho)</td>
                 <td><span class="column-value" id="pfwd-name">06. PFWD</span></td>
               </tr>
             </tbody>
           </table>
 
-          <div class="checkbox-section">
-            <label>
-              <input type="checkbox" name="incluir_pfwd" id="incluir_pfwd" onchange="togglePfwdRow()">
-              <span>🌾 Incluir cálculo GDU para florescimento masculino (PFWD)</span>
-            </label>
+          <div class="info-section">
+            <p class="info-text">
+              🌾 O sistema automaticamente calculará o GDU para florescimento masculino (PFWD) se essa coluna estiver presente nos arquivos.
+            </p>
           </div>
 
           <input type="hidden" name="col_plantio" id="col_plantio" value="Data de Plantio">
@@ -581,10 +604,14 @@
   </div>
 
   <script>
-    function showFileName(input) {
+    function showFileNames(input) {
       const fileSelected = document.getElementById('file-selected');
-      if (input.files && input.files[0]) {
-        fileSelected.innerHTML = `📄 Arquivo selecionado: <strong>${input.files[0].name}</strong>`;
+      if (input.files && input.files.length > 0) {
+        let fileList = '';
+        for (let i = 0; i < input.files.length; i++) {
+          fileList += `<div>📄 ${i+1}. <strong>${input.files[i].name}</strong></div>`;
+        }
+        fileSelected.innerHTML = `<div>Arquivos selecionados (${input.files.length}):</div>${fileList}`;
         fileSelected.style.display = 'block';
       } else {
         fileSelected.style.display = 'none';
@@ -617,14 +644,13 @@
       closeModal();
     }
 
-    function togglePfwdRow() {
-      const checkbox = document.getElementById('incluir_pfwd');
+    // A função togglePfwdRow foi removida pois não é mais necessária
+    // PFWD é automaticamente detectado nos arquivos
+    function showPfwdRow() {
+      // Esta função existe apenas para manter a estrutura do JavaScript
       const pfwdRow = document.getElementById('pfwd-row');
-      
-      if (checkbox.checked) {
+      if (pfwdRow) {
         pfwdRow.style.display = 'table-row';
-      } else {
-        pfwdRow.style.display = 'none';
       }
     }
 

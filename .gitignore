@@ -3,6 +3,18 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Generated data
+uploads/*
+!uploads/.gitkeep
+results/*
+!results/.gitkeep
+
+# Temporary files
+*.bak
+main_updated.py
+python-installer.exe
+teste/
+
 # C extensions
 *.so
 
