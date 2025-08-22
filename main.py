@@ -87,11 +87,24 @@ def index():
                 original_filename = file.filename
                 filepath = os.path.join(UPLOAD_FOLDER, original_filename)
                 file.save(filepath)
-
-                df = pd.read_excel(filepath)
+                
+                # Verificar tamanho do arquivo e mostrar aviso
+                file_size_kb = os.path.getsize(filepath) / 1024
+                if file_size_kb > 800:
+                    print(f"AVISO: O arquivo {original_filename} tem {file_size_kb:.2f}KB e pode causar timeout no processamento")
+                
+                # Otimizar leitura de planilhas para usar menos memória
+                df = pd.read_excel(
+                    filepath,
+                    engine='openpyxl'  # O motor openpyxl é geralmente mais eficiente em memória
+                )
                 df_result = df.copy()
                 erros = 0
                 linhas_validas = 0
+                
+                # Forçar coleta de lixo após leitura do arquivo
+                import gc
+                gc.collect()
             except Exception as e:
                 print(f"Erro ao carregar o arquivo {file.filename}: {e}")
                 continue
@@ -233,6 +246,9 @@ def index():
                 # Adicionar à lista de arquivos processados
                 processed_filenames.append(output_filename)
                 print(f"Arquivo {original_filename} processado com sucesso e adicionado à lista.")
+                
+                # Forçar coleta de lixo após processamento completo do arquivo
+                gc.collect()
                 
             except Exception as e:
                 print(f"Erro ao finalizar o processamento do arquivo {original_filename}: {e}")

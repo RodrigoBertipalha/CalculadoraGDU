@@ -514,6 +514,11 @@
           </h3>
           <p>Selecione um ou mais arquivos Excel (.xlsx) contendo os dados do campo:</p>
           
+          <div class="status-message status-warning">
+            <b>Atenção:</b> Arquivos muito grandes (acima de 800KB) podem causar erros de tempo limite no processamento. 
+            Para arquivos grandes, recomenda-se dividi-los em partes menores ou enviá-los individualmente.
+          </div>
+          
           <div class="file-input-container">
             <input type="file" name="files[]" class="file-input" multiple required onchange="showFileNames(this)">
             <label class="file-input-label">
