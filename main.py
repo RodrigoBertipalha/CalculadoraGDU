@@ -25,8 +25,9 @@ try:
     from memory_profile import init_memory_monitor
     init_memory_monitor()
     print("Monitor de memória iniciado")
-except ImportError:
-    print("Monitor de memória não disponível (psutil pode estar faltando)")
+except Exception as e:
+    print(f"Monitor de memória não disponível: {e}")
+    print("Continuando sem monitoramento de memória...")
 
 app = Flask(__name__)
 app.secret_key = 'segredo'
@@ -325,14 +326,21 @@ def download(filename):
 def clean_all_files():
     """Limpa todos os arquivos temporários nos diretórios de upload e resultados"""
     for directory in [UPLOAD_FOLDER, RESULT_FOLDER]:
-        for item in os.listdir(directory):
-            item_path = os.path.join(directory, item)
-            if os.path.isfile(item_path) and item != '.gitkeep':
-                try:
-                    os.remove(item_path)
-                    print(f"Arquivo removido durante inicialização: {item_path}")
-                except Exception as e:
-                    print(f"Erro ao remover arquivo {item_path}: {e}")
+        try:
+            # Garante que o diretório existe antes de tentar listá-lo
+            os.makedirs(directory, exist_ok=True)
+            
+            # Lista e remove arquivos
+            for item in os.listdir(directory):
+                item_path = os.path.join(directory, item)
+                if os.path.isfile(item_path) and item != '.gitkeep':
+                    try:
+                        os.remove(item_path)
+                        print(f"Arquivo removido durante inicialização: {item_path}")
+                    except Exception as e:
+                        print(f"Erro ao remover arquivo {item_path}: {e}")
+        except Exception as e:
+            print(f"Erro ao limpar diretório {directory}: {e}")
 
 if __name__ == '__main__':
     # Limpa todos os arquivos temporários na inicialização

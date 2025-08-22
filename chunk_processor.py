@@ -2,19 +2,61 @@ import pandas as pd
 import os
 import numpy as np
 import gc
-from openpyxl import load_workbook
+import traceback
+
+# Usa try/except para a importação do openpyxl
+try:
+    from openpyxl import load_workbook
+except ImportError:
+    # Implementação de fallback para contar linhas
+    def count_rows_in_excel(filepath):
+        """Fallback para contar linhas usando pandas"""
+        try:
+            # Verifica se o arquivo existe
+            if not os.path.exists(filepath):
+                return 0
+            
+            # Tenta ler apenas 1 linha para ver se o arquivo é válido
+            test_df = pd.read_excel(filepath, nrows=1)
+            
+            # Se chegou aqui, o arquivo é válido, usa uma estimativa baseada no tamanho
+            file_size = os.path.getsize(filepath)
+            # Estimativa grosseira: ~100 bytes por linha
+            estimated_rows = min(file_size // 100, 10000)
+            return max(estimated_rows, 10)  # No mínimo 10 linhas
+        except Exception as e:
+            print(f"Erro ao estimar linhas: {e}")
+            return 100  # Valor padrão seguro
 
 def count_rows_in_excel(filepath):
     """Conta o número de linhas em um arquivo Excel sem carregar todo o conteúdo na memória."""
     try:
-        # Carrega apenas as propriedades do workbook
-        wb = load_workbook(filepath, read_only=True)
-        sheet = wb.active
-        # Retorna o número máximo de linhas
-        return sheet.max_row
+        # Verifica se load_workbook está disponível (definido acima)
+        if 'load_workbook' in globals():
+            # Carrega apenas as propriedades do workbook
+            wb = load_workbook(filepath, read_only=True)
+            sheet = wb.active
+            # Retorna o número máximo de linhas
+            row_count = sheet.max_row
+            # Libera memória
+            del wb
+            gc.collect()
+            return row_count
+        else:
+            # Usa o fallback definido acima
+            return count_rows_in_excel(filepath)
     except Exception as e:
         print(f"Erro ao contar linhas: {e}")
-        return 0
+        print(traceback.format_exc())
+        
+        # Fallback seguro: estima linhas com base no tamanho do arquivo
+        try:
+            file_size = os.path.getsize(filepath)
+            # Estimativa grosseira: ~100 bytes por linha
+            estimated_rows = min(file_size // 100, 10000)
+            return max(estimated_rows, 10)  # No mínimo 10 linhas
+        except:
+            return 100  # Valor padrão muito seguro
 
 def process_excel_in_chunks(filepath, clima_df, chunk_size=100, col_plantio="Data de Plantio", 
                            col_sfwd="05. SFWD", col_pfwd="06. PFWD"):
@@ -22,11 +64,16 @@ def process_excel_in_chunks(filepath, clima_df, chunk_size=100, col_plantio="Dat
     Processa um arquivo Excel em chunks para evitar esgotar a memória.
     Retorna um DataFrame com os resultados.
     """
-    # Contar linhas para determinar o número de chunks necessários
-    total_rows = count_rows_in_excel(filepath)
-    if total_rows <= 1:  # Apenas o cabeçalho ou vazio
-        print(f"Arquivo {filepath} vazio ou contém apenas cabeçalho.")
-        return pd.DataFrame(), 0, 0, 0
+    try:
+        # Contar linhas para determinar o número de chunks necessários
+        total_rows = count_rows_in_excel(filepath)
+        if total_rows <= 1:  # Apenas o cabeçalho ou vazio
+            print(f"Arquivo {filepath} vazio ou contém apenas cabeçalho.")
+            return pd.DataFrame(), 0, 0, 0
+    except Exception as e:
+        print(f"Erro ao contar linhas, usando valor padrão: {e}")
+        # Se falhar em contar linhas, use um valor padrão seguro
+        total_rows = 1000
     
     print(f"Processando arquivo {filepath} com aproximadamente {total_rows} linhas em chunks de {chunk_size}")
     
