@@ -9,8 +9,7 @@ import threading
 from pathlib import Path
 import gc
 
-# Configurar pandas para usar menos memória
-pd.set_option('io.excel.engine', 'openpyxl')
+# Nota: Usar engine='openpyxl' diretamente nas chamadas de read_excel
 
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
@@ -96,11 +95,23 @@ def index():
                 file_size_kb = os.path.getsize(filepath) / 1024
                 print(f"Arquivo: {original_filename}, Tamanho: {file_size_kb:.2f}KB")
                 
-                # Leitura simples do arquivo Excel
+                # Leitura simples do arquivo Excel com otimização de tipos de dados
                 df = pd.read_excel(filepath, engine='openpyxl')
+                
+                # Otimizar uso de memória convertendo tipos de dados
+                for col in df.columns:
+                    if df[col].dtype == 'float64':
+                        df[col] = pd.to_numeric(df[col], downcast='float')
+                    elif df[col].dtype == 'int64':
+                        df[col] = pd.to_numeric(df[col], downcast='integer')
+                
                 df_result = df.copy()
                 erros = 0
                 linhas_validas = 0
+                
+                # Forçar liberação de memória após cópia
+                del df
+                gc.collect(generation=2)
             except Exception as e:
                 print(f"Erro ao carregar o arquivo {file.filename}: {e}")
                 continue
@@ -126,66 +137,98 @@ def index():
             df_result[f'{col_sfwd}_orig'] = df_result[col_sfwd].copy()
             if incluir_pfwd_atual:
                 df_result[f'{col_pfwd}_orig'] = df_result[col_pfwd].copy()
-
-            # Processar cada linha do arquivo
-            for i, row in df.iterrows():
-                    try:
-                        # Converter as datas para o processamento interno
-                        data_plantio = pd.to_datetime(row[col_plantio], dayfirst=True, errors='coerce')
-                        data_sfwd = pd.to_datetime(row[col_sfwd], dayfirst=True, errors='coerce')
-                        
-                        # Formata as datas para cálculo no formato dd/mm/aaaa
-                        if not pd.isna(data_plantio):
-                            df_result.at[i, col_plantio] = data_plantio.strftime('%d/%m/%Y')
-                        if not pd.isna(data_sfwd):
-                            df_result.at[i, col_sfwd] = data_sfwd.strftime('%d/%m/%Y')
-
-                        if pd.isna(data_plantio) or pd.isna(data_sfwd) or str(data_plantio).upper() == "N/A" or str(data_sfwd).upper() == "N/A":
-                            # Usar NaN para valores numéricos vazios
-                            df_result.at[i, 'dias'] = float('nan') 
-                            df_result.at[i, 'gdu_acumulado'] = float('nan')
-                            erros += 1
-                        else:
-                            intervalo = clima_df[(clima_df['data'] > data_plantio) & (clima_df['data'] <= data_sfwd)].copy()
-                            intervalo['GDU'] = ((intervalo['temp_min'] + intervalo['temp_max']) / 2) - 10
-                            gdu_acumulado = intervalo['GDU'].sum()
-                            dias = (data_sfwd - data_plantio).days
-
-                            df_result.at[i, 'dias'] = dias
-                            df_result.at[i, 'gdu_acumulado'] = round(gdu_acumulado, 2)
-                            linhas_validas += 1
-
-                        if incluir_pfwd_atual:
-                            data_pfwd = pd.to_datetime(row[col_pfwd], dayfirst=True, errors='coerce')
+                
+            try:
+                # Processamento otimizado - conversão vetorizada das datas
+                print(f"Convertendo datas de plantio e SFWD para o arquivo {original_filename}...")
+                
+                # Converter todas as datas de uma vez (operação vetorizada)
+                datas_plantio = pd.to_datetime(df_result[col_plantio], dayfirst=True, errors='coerce')
+                datas_sfwd = pd.to_datetime(df_result[col_sfwd], dayfirst=True, errors='coerce')
+                
+                # Inicializar colunas de resultado com NaN
+                df_result['dias'] = float('nan')
+                df_result['gdu_acumulado'] = float('nan')
+                
+                # Criar máscara para linhas com datas válidas
+                mask_validas = ~(pd.isna(datas_plantio) | pd.isna(datas_sfwd))
+                linhas_validas = mask_validas.sum()
+                erros = len(df_result) - linhas_validas
+                
+                # Calcular dias apenas para linhas válidas
+                if linhas_validas > 0:
+                    print(f"Calculando intervalos de dias para {linhas_validas} linhas...")
+                    df_result.loc[mask_validas, 'dias'] = (datas_sfwd[mask_validas] - datas_plantio[mask_validas]).dt.days
+                    
+                    # Processar GDU para cada linha válida - isso ainda precisa ser feito linha por linha
+                    # devido à natureza do filtro de datas no clima_df
+                    print(f"Calculando GDU acumulado para {linhas_validas} linhas...")
+                    
+                    # Processar em lotes de 100 para reduzir uso de memória
+                    batch_size = 100
+                    valid_indices = df_result.index[mask_validas].tolist()
+                    
+                    for start_idx in range(0, len(valid_indices), batch_size):
+                        # Liberar memória a cada lote
+                        if start_idx > 0 and start_idx % 1000 == 0:
+                            print(f"Processados {start_idx} registros. Coletando lixo...")
+                            gc.collect(generation=2)
                             
-                            # Formata a data PFWD
-                            if not pd.isna(data_pfwd):
-                                df_result.at[i, col_pfwd] = data_pfwd.strftime('%d/%m/%Y')
-
-                            if pd.isna(data_pfwd) or str(data_pfwd).upper() == "N/A":
-                                # Usar NaN para valores numéricos vazios
-                                df_result.at[i, 'dias_pfwd'] = float('nan')
-                                df_result.at[i, 'gdu_acumulado_pfwd'] = float('nan')
-                                erros += 1
-                            else:
-                                intervalo_pfwd = clima_df[(clima_df['data'] > data_plantio) & (clima_df['data'] <= data_pfwd)].copy()
-                                intervalo_pfwd['GDU'] = ((intervalo_pfwd['temp_min'] + intervalo_pfwd['temp_max']) / 2) - 10
-                                gdu_pfwd = intervalo_pfwd['GDU'].sum()
-                                dias_pfwd = (data_pfwd - data_plantio).days
-
-                                df_result.at[i, 'dias_pfwd'] = dias_pfwd
+                        batch_indices = valid_indices[start_idx:start_idx + batch_size]
+                        
+                        for i in batch_indices:
+                            data_plantio = datas_plantio[i]
+                            data_sfwd = datas_sfwd[i]
+                            
+                            intervalo = clima_df[(clima_df['data'] > data_plantio) & (clima_df['data'] <= data_sfwd)]
+                            intervalo_gdu = ((intervalo['temp_min'] + intervalo['temp_max']) / 2) - 10
+                            gdu_acumulado = intervalo_gdu.sum()
+                            
+                            df_result.at[i, 'gdu_acumulado'] = round(gdu_acumulado, 2)
+                
+                # Processar PFWD se existir
+                if incluir_pfwd_atual:
+                    print(f"Processando dados de PFWD para o arquivo {original_filename}...")
+                    datas_pfwd = pd.to_datetime(df_result[col_pfwd], dayfirst=True, errors='coerce')
+                    
+                    # Inicializar colunas PFWD com NaN
+                    df_result['dias_pfwd'] = float('nan')
+                    df_result['gdu_acumulado_pfwd'] = float('nan')
+                    
+                    # Criar máscara para linhas PFWD válidas
+                    mask_pfwd_validas = ~(pd.isna(datas_plantio) | pd.isna(datas_pfwd))
+                    
+                    # Calcular dias PFWD apenas para linhas válidas
+                    if mask_pfwd_validas.sum() > 0:
+                        print(f"Calculando intervalos de dias PFWD para {mask_pfwd_validas.sum()} linhas...")
+                        df_result.loc[mask_pfwd_validas, 'dias_pfwd'] = (datas_pfwd[mask_pfwd_validas] - datas_plantio[mask_pfwd_validas]).dt.days
+                        
+                        # Processar GDU PFWD em lotes
+                        valid_pfwd_indices = df_result.index[mask_pfwd_validas].tolist()
+                        
+                        for start_idx in range(0, len(valid_pfwd_indices), batch_size):
+                            # Liberar memória a cada lote
+                            if start_idx > 0 and start_idx % 1000 == 0:
+                                print(f"Processados {start_idx} registros PFWD. Coletando lixo...")
+                                gc.collect(generation=2)
+                                
+                            batch_indices = valid_pfwd_indices[start_idx:start_idx + batch_size]
+                            
+                            for i in batch_indices:
+                                data_plantio = datas_plantio[i]
+                                data_pfwd = datas_pfwd[i]
+                                
+                                intervalo = clima_df[(clima_df['data'] > data_plantio) & (clima_df['data'] <= data_pfwd)]
+                                intervalo_gdu = ((intervalo['temp_min'] + intervalo['temp_max']) / 2) - 10
+                                gdu_pfwd = intervalo_gdu.sum()
+                                
                                 df_result.at[i, 'gdu_acumulado_pfwd'] = round(gdu_pfwd, 2)
-                                linhas_validas += 1
-
-                    except Exception as e:
-                        # Usar NaN para valores numéricos vazios
-                        print(f"Erro ao processar linha {i} do arquivo {original_filename}: {e}")
-                        df_result.at[i, 'dias'] = float('nan')
-                        df_result.at[i, 'gdu_acumulado'] = float('nan')
-                        if incluir_pfwd_atual:
-                            df_result.at[i, 'dias_pfwd'] = float('nan')
-                            df_result.at[i, 'gdu_acumulado_pfwd'] = float('nan')
-                        erros += 1
+                
+            except Exception as e:
+                # Tratamento de erro global para todo o processamento de dados
+                print(f"Erro durante o processamento de dados do arquivo {original_filename}: {e}")
+                erros = len(df_result)
+                linhas_validas = 0
             # Restaurar as colunas de datas originais para garantir que não sejam modificadas
             try:
                 df_result[col_plantio] = df_result[f'{col_plantio}_orig']
