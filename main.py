@@ -64,6 +64,31 @@ clima_df = pd.read_excel(
 # Garante que datas sejam datetime com formato brasileiro (dayfirst=True)
 clima_df['data'] = pd.to_datetime(clima_df['data'], dayfirst=True)
 
+# Otimizar clima_df para consulta rápida
+print("Otimizando clima_df para consulta rápida...")
+# Pré-calcular GDU diário e indexar por data
+clima_df['gdu_diario'] = ((clima_df['temp_min'] + clima_df['temp_max']) / 2) - 10
+clima_gdu_dict = {}
+for _, row in clima_df.iterrows():
+    clima_gdu_dict[row['data'].date()] = row['gdu_diario']
+
+# Otimizar o cálculo de GDU
+def calcular_gdu_rapido(data_inicio, data_fim):
+    """Calcula o GDU de forma otimizada entre duas datas"""
+    if pd.isna(data_inicio) or pd.isna(data_fim):
+        return float('nan')
+    
+    data_atual = data_inicio.date()
+    data_fim = data_fim.date()
+    gdu_acumulado = 0
+    
+    while data_atual <= data_fim:
+        if data_atual in clima_gdu_dict:
+            gdu_acumulado += clima_gdu_dict[data_atual]
+        data_atual += datetime.timedelta(days=1)
+    
+    return round(gdu_acumulado, 2)
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
@@ -95,15 +120,40 @@ def index():
                 file_size_kb = os.path.getsize(filepath) / 1024
                 print(f"Arquivo: {original_filename}, Tamanho: {file_size_kb:.2f}KB")
                 
-                # Leitura simples do arquivo Excel com otimização de tipos de dados
-                df = pd.read_excel(filepath, engine='openpyxl')
+                # Leitura do arquivo Excel com otimização máxima de memória
+                print(f"Lendo arquivo {original_filename} com otimização de memória...")
                 
-                # Otimizar uso de memória convertendo tipos de dados
-                for col in df.columns:
-                    if df[col].dtype == 'float64':
-                        df[col] = pd.to_numeric(df[col], downcast='float')
-                    elif df[col].dtype == 'int64':
-                        df[col] = pd.to_numeric(df[col], downcast='integer')
+                # Verificar tamanho e usar leitura em chunks se for muito grande
+                if file_size_kb > 250:  # Se for maior que 250KB
+                    print(f"Arquivo grande detectado ({file_size_kb:.2f}KB). Usando leitura otimizada...")
+                    # Primeiro ler só o cabeçalho para obter as colunas
+                    header_df = pd.read_excel(filepath, engine='openpyxl', nrows=0)
+                    dtypes = {col: 'object' for col in header_df.columns}
+                    
+                    # Ler em chunks para economizar memória
+                    chunk_size = 1000
+                    chunks = []
+                    for chunk in pd.read_excel(filepath, engine='openpyxl', chunksize=chunk_size, dtype=dtypes):
+                        for col in chunk.columns:
+                            if chunk[col].dtype == 'float64':
+                                chunk[col] = pd.to_numeric(chunk[col], downcast='float')
+                            elif chunk[col].dtype == 'int64':
+                                chunk[col] = pd.to_numeric(chunk[col], downcast='integer')
+                        chunks.append(chunk)
+                        gc.collect(generation=2)
+                    
+                    df = pd.concat(chunks)
+                    del chunks
+                else:
+                    # Para arquivos menores, leitura normal
+                    df = pd.read_excel(filepath, engine='openpyxl')
+                    
+                    # Otimizar uso de memória convertendo tipos de dados
+                    for col in df.columns:
+                        if df[col].dtype == 'float64':
+                            df[col] = pd.to_numeric(df[col], downcast='float')
+                        elif df[col].dtype == 'int64':
+                            df[col] = pd.to_numeric(df[col], downcast='integer')
                 
                 df_result = df.copy()
                 erros = 0
@@ -180,11 +230,9 @@ def index():
                             data_plantio = datas_plantio[i]
                             data_sfwd = datas_sfwd[i]
                             
-                            intervalo = clima_df[(clima_df['data'] > data_plantio) & (clima_df['data'] <= data_sfwd)]
-                            intervalo_gdu = ((intervalo['temp_min'] + intervalo['temp_max']) / 2) - 10
-                            gdu_acumulado = intervalo_gdu.sum()
-                            
-                            df_result.at[i, 'gdu_acumulado'] = round(gdu_acumulado, 2)
+                            # Usar a função otimizada em vez do filtro de dataframe
+                            gdu_acumulado = calcular_gdu_rapido(data_plantio, data_sfwd)
+                            df_result.at[i, 'gdu_acumulado'] = gdu_acumulado
                 
                 # Processar PFWD se existir
                 if incluir_pfwd_atual:
@@ -218,11 +266,9 @@ def index():
                                 data_plantio = datas_plantio[i]
                                 data_pfwd = datas_pfwd[i]
                                 
-                                intervalo = clima_df[(clima_df['data'] > data_plantio) & (clima_df['data'] <= data_pfwd)]
-                                intervalo_gdu = ((intervalo['temp_min'] + intervalo['temp_max']) / 2) - 10
-                                gdu_pfwd = intervalo_gdu.sum()
-                                
-                                df_result.at[i, 'gdu_acumulado_pfwd'] = round(gdu_pfwd, 2)
+                                # Usar a função otimizada em vez do filtro de dataframe
+                                gdu_pfwd = calcular_gdu_rapido(data_plantio, data_pfwd)
+                                df_result.at[i, 'gdu_acumulado_pfwd'] = gdu_pfwd
                 
             except Exception as e:
                 # Tratamento de erro global para todo o processamento de dados
