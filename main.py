@@ -9,8 +9,10 @@ import threading
 from pathlib import Path
 import gc
 
+# Configurar pandas para usar menos memória
+pd.set_option('io.excel.engine', 'openpyxl')
+
 app = Flask(__name__)
-app.secret_key = 'segredo'
 UPLOAD_FOLDER = 'uploads'
 RESULT_FOLDER = 'results'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -56,7 +58,8 @@ cleanup_thread.start()
 # Base climática fixa
 clima_df = pd.read_excel(
     'base_clima/temperaturas_2025.xlsx',
-    sheet_name='Fonte  Estação Terra Nova Temp.'
+    sheet_name='Fonte  Estação Terra Nova Temp.',
+    engine='openpyxl'
 )
 
 # Garante que datas sejam datetime com formato brasileiro (dayfirst=True)
@@ -94,7 +97,7 @@ def index():
                 print(f"Arquivo: {original_filename}, Tamanho: {file_size_kb:.2f}KB")
                 
                 # Leitura simples do arquivo Excel
-                df = pd.read_excel(filepath)
+                df = pd.read_excel(filepath, engine='openpyxl')
                 df_result = df.copy()
                 erros = 0
                 linhas_validas = 0
@@ -246,7 +249,7 @@ def index():
             print(f"Arquivo {original_filename} processado com sucesso e adicionado à lista.")
             
             # Forçar coleta de lixo após processamento completo do arquivo
-            gc.collect()
+            gc.collect(generation=2)  # Coleta de lixo mais agressiva
 
         # Determina a mensagem de status para todos os arquivos processados
         num_files = len(processed_filenames)
