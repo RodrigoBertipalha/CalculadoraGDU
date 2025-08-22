@@ -202,6 +202,10 @@ def index():
                         gdu_pfwd_alto = df_result[pd.to_numeric(df_result['gdu_acumulado_pfwd'], errors='coerce') > 1200].shape[0]
                     
                     arquivo_gdu_alto = gdu_alto + gdu_pfwd_alto
+                except Exception as e:
+                    print(f"Erro ao processar estatísticas do arquivo {original_filename}: {e}")
+                    arquivo_gdu_alto = 0
+                
                 total_gdu_alto += arquivo_gdu_alto
                 total_erros += erros
                 total_linhas_validas += linhas_validas
@@ -212,7 +216,7 @@ def index():
                 
                 # Salvar o arquivo com formatação melhorada usando XlsxWriter
                 with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
-                        df_result.to_excel(writer, index=False, sheet_name='GDU')
+                    df_result.to_excel(writer, index=False, sheet_name='GDU')
                     
                     # Acessar o workbook e o worksheet para formatação
                     workbook = writer.book
