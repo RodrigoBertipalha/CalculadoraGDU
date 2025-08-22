@@ -110,35 +110,32 @@ def index():
                 
                 # Verificar tamanho do arquivo e mostrar aviso
                 file_size_kb = os.path.getsize(filepath) / 1024
-                if file_size_kb > 800:
-                    print(f"AVISO: O arquivo {original_filename} tem {file_size_kb:.2f}KB e pode causar timeout no processamento")
+                print(f"Arquivo: {original_filename}, Tamanho: {file_size_kb:.2f}KB")
                 
-                # Configurar Pandas para usar menos memória
-                import pandas as pd
-                import numpy as np
-                # Desabilitar a thread paralela do openpyxl para reduzir uso de memória
-                os.environ["OPENPYXL_NOTHREADED"] = "1"
+                # Definir o tamanho do chunk baseado no tamanho do arquivo
+                chunk_size = 50  # Padrão para arquivos pequenos
+                if file_size_kb > 200:
+                    chunk_size = 25  # Arquivos médios
+                if file_size_kb > 500:
+                    chunk_size = 10  # Arquivos grandes
                 
-                # Otimizar leitura de planilhas para usar muito menos memória
-                df = pd.read_excel(
-                    filepath,
-                    engine='openpyxl',
-                    # Otimizações para reduzir drasticamente o uso de memória
-                    dtype_backend='numpy_nullable',
-                    na_values=['NA', 'N/A', 'n/a', 'na', '', 'null', 'NULL', 'None', 'none'],
-                    keep_default_na=False
+                # Usar o processador em chunks para arquivos grandes
+                from chunk_processor import process_excel_in_chunks
+                
+                # Processar o arquivo em chunks
+                df_result, erros_chunk, linhas_validas_chunk, gdu_alto_chunk = process_excel_in_chunks(
+                    filepath, 
+                    clima_df,
+                    chunk_size=chunk_size,
+                    col_plantio=col_plantio,
+                    col_sfwd=col_sfwd,
+                    col_pfwd=col_pfwd
                 )
                 
-                # Convertendo colunas para tipo de dados mais eficientes
-                for col in df.select_dtypes(include=['object']).columns:
-                    # Tenta converter para categoria, que usa muito menos memória
-                    df[col] = df[col].astype('category')
+                erros = erros_chunk
+                linhas_validas = linhas_validas_chunk
                 
-                df_result = df.copy(deep=False)  # Usar referência ao invés de cópia profunda quando possível
-                erros = 0
-                linhas_validas = 0
-                
-                # Forçar coleta de lixo após leitura do arquivo
+                # Forçar coleta de lixo após processamento
                 import gc
                 gc.collect()
             except Exception as e:
@@ -146,106 +143,33 @@ def index():
                 continue
         
             # Verificar se as colunas necessárias existem no DataFrame
-            if col_plantio not in df_result.columns:
-                print(f"Erro: Coluna '{col_plantio}' não encontrada no arquivo {original_filename}")
+            # O processamento agora é feito em chunks pelo chunk_processor.py
+            # Verificar se o processamento de chunks foi bem-sucedido
+            if df_result.empty:
+                print(f"Erro: Falha ao processar o arquivo {original_filename}")
                 continue
                 
-            if col_sfwd not in df_result.columns:
-                print(f"Erro: Coluna '{col_sfwd}' não encontrada no arquivo {original_filename}")
-                continue
-                
-            # Verificar automaticamente se a coluna PFWD existe e usá-la se existir
+            # Verificar automaticamente se a coluna PFWD existe (já feito no chunk_processor)
             incluir_pfwd_atual = col_pfwd in df_result.columns
-            if incluir_pfwd_atual:
-                print(f"Coluna '{col_pfwd}' encontrada no arquivo {original_filename}. Incluindo cálculos PFWD.")
-            else:
-                print(f"Coluna '{col_pfwd}' não encontrada no arquivo {original_filename}. Ignorando cálculos PFWD.")
+            
+            # Não precisamos mais processar linha por linha porque o chunk_processor
+            # já fez todo o processamento necessário
+                # O processamento linha por linha foi movido para o chunk_processor
+                # Não precisamos mais desse código, pois o df_result já vem com os cálculos feitos
                 
-            # Criar colunas para guardar as datas originais sem modificação
-            df_result[f'{col_plantio}_orig'] = df_result[col_plantio].copy()
-            df_result[f'{col_sfwd}_orig'] = df_result[col_sfwd].copy()
-            if incluir_pfwd_atual:
-                df_result[f'{col_pfwd}_orig'] = df_result[col_pfwd].copy()
-
-            # Processar cada linha do arquivo
-            for i, row in df.iterrows():
+                # Verificar quantos valores de GDU acumulado estão acima do limite
                 try:
-                    # Converter as datas para o processamento interno
-                    data_plantio = pd.to_datetime(row[col_plantio], dayfirst=True, errors='coerce')
-                    data_sfwd = pd.to_datetime(row[col_sfwd], dayfirst=True, errors='coerce')
+                    # Calcular quantos registros têm GDU acumulado acima de 1200
+                    gdu_alto = df_result[pd.to_numeric(df_result['gdu_acumulado'], errors='coerce') > 1200].shape[0]
+                    gdu_pfwd_alto = 0
+                    if incluir_pfwd_atual and 'gdu_acumulado_pfwd' in df_result.columns:
+                        gdu_pfwd_alto = df_result[pd.to_numeric(df_result['gdu_acumulado_pfwd'], errors='coerce') > 1200].shape[0]
                     
-                    # Formata as datas para cálculo no formato dd/mm/aaaa
-                    if not pd.isna(data_plantio):
-                        df_result.at[i, col_plantio] = data_plantio.strftime('%d/%m/%Y')
-                    if not pd.isna(data_sfwd):
-                        df_result.at[i, col_sfwd] = data_sfwd.strftime('%d/%m/%Y')
-
-                    if pd.isna(data_plantio) or pd.isna(data_sfwd) or str(data_plantio).upper() == "N/A" or str(data_sfwd).upper() == "N/A":
-                        # Usar NaN para valores numéricos vazios
-                        df_result.at[i, 'dias'] = float('nan') 
-                        df_result.at[i, 'gdu_acumulado'] = float('nan')
-                        erros += 1
-                    else:
-                        intervalo = clima_df[(clima_df['data'] > data_plantio) & (clima_df['data'] <= data_sfwd)].copy()
-                        intervalo['GDU'] = ((intervalo['temp_min'] + intervalo['temp_max']) / 2) - 10
-                        gdu_acumulado = intervalo['GDU'].sum()
-                        dias = (data_sfwd - data_plantio).days
-
-                        df_result.at[i, 'dias'] = dias
-                        df_result.at[i, 'gdu_acumulado'] = round(gdu_acumulado, 2)
-                        linhas_validas += 1
-
-                    if incluir_pfwd_atual:
-                        data_pfwd = pd.to_datetime(row[col_pfwd], dayfirst=True, errors='coerce')
-                        
-                        # Formata a data PFWD
-                        if not pd.isna(data_pfwd):
-                            df_result.at[i, col_pfwd] = data_pfwd.strftime('%d/%m/%Y')
-
-                        if pd.isna(data_pfwd) or str(data_pfwd).upper() == "N/A":
-                            # Usar NaN para valores numéricos vazios
-                            df_result.at[i, 'dias_pfwd'] = float('nan')
-                            df_result.at[i, 'gdu_acumulado_pfwd'] = float('nan')
-                            erros += 1
-                        else:
-                            intervalo_pfwd = clima_df[(clima_df['data'] > data_plantio) & (clima_df['data'] <= data_pfwd)].copy()
-                            intervalo_pfwd['GDU'] = ((intervalo_pfwd['temp_min'] + intervalo_pfwd['temp_max']) / 2) - 10
-                            gdu_pfwd = intervalo_pfwd['GDU'].sum()
-                            dias_pfwd = (data_pfwd - data_plantio).days
-
-                            df_result.at[i, 'dias_pfwd'] = dias_pfwd
-                            df_result.at[i, 'gdu_acumulado_pfwd'] = round(gdu_pfwd, 2)
-                            linhas_validas += 1
-
+                    arquivo_gdu_alto = gdu_alto + gdu_pfwd_alto
                 except Exception as e:
-                    # Usar NaN para valores numéricos vazios
-                    print(f"Erro ao processar linha {i} do arquivo {original_filename}: {e}")
-                    df_result.at[i, 'dias'] = float('nan')
-                    df_result.at[i, 'gdu_acumulado'] = float('nan')
-                    if incluir_pfwd_atual:
-                        df_result.at[i, 'dias_pfwd'] = float('nan')
-                        df_result.at[i, 'gdu_acumulado_pfwd'] = float('nan')
-                    erros += 1
-
-            # Restaurar as colunas de datas originais para garantir que não sejam modificadas
-            try:
-                df_result[col_plantio] = df_result[f'{col_plantio}_orig']
-                df_result[col_sfwd] = df_result[f'{col_sfwd}_orig']
-                if incluir_pfwd_atual and f'{col_pfwd}_orig' in df_result.columns:
-                    df_result[col_pfwd] = df_result[f'{col_pfwd}_orig']
-                
-                # Remover as colunas temporárias que não precisamos mais
-                df_result = df_result.drop(columns=[f'{col_plantio}_orig', f'{col_sfwd}_orig'], errors='ignore')
-                if incluir_pfwd_atual and f'{col_pfwd}_orig' in df_result.columns:
-                    df_result = df_result.drop(columns=[f'{col_pfwd}_orig'], errors='ignore')
-                
-                # Verificar se há algum GDU acumulado acima de 1200
-                gdu_alto = df_result[pd.to_numeric(df_result['gdu_acumulado'], errors='coerce') > 1200].shape[0]
-                gdu_pfwd_alto = 0
-                if incluir_pfwd_atual and 'gdu_acumulado_pfwd' in df_result.columns:
-                    gdu_pfwd_alto = df_result[pd.to_numeric(df_result['gdu_acumulado_pfwd'], errors='coerce') > 1200].shape[0]
-                
-                arquivo_gdu_alto = gdu_alto + gdu_pfwd_alto
+                    print(f"Erro ao calcular GDU alto: {e}")
+                    arquivo_gdu_alto = 0
+                # Este trecho foi movido para cima no código
                 total_gdu_alto += arquivo_gdu_alto
                 total_erros += erros
                 total_linhas_validas += linhas_validas
@@ -255,8 +179,35 @@ def index():
                 output_path = os.path.join(RESULT_FOLDER, output_filename)
                 
                 # Salvar o arquivo com formatação melhorada usando XlsxWriter
-                with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
-                    df_result.to_excel(writer, index=False, sheet_name='GDU')
+                with pd.ExcelWriter(output_path, engine='xlsxwriter', mode='w') as writer:
+                    # Salvar em blocos pequenos para reduzir o uso de memória
+                    batch_size = 1000
+                    total_rows = len(df_result)
+                    
+                    # Se o arquivo é grande, salvar em lotes para economizar memória
+                    if total_rows > batch_size:
+                        print(f"Salvando arquivo grande em lotes de {batch_size} linhas")
+                        # Primeiro, salve o cabeçalho
+                        df_result.iloc[0:0].to_excel(writer, index=False, sheet_name='GDU')
+                        
+                        # Depois salve cada lote
+                        for start_row in range(0, total_rows, batch_size):
+                            end_row = min(start_row + batch_size, total_rows)
+                            print(f"Salvando linhas {start_row} a {end_row}")
+                            if start_row == 0:
+                                # Primeira vez inclui o cabeçalho
+                                df_result.iloc[start_row:end_row].to_excel(writer, index=False, sheet_name='GDU')
+                            else:
+                                # Depois, anexar sem cabeçalho
+                                df_result.iloc[start_row:end_row].to_excel(
+                                    writer, index=False, sheet_name='GDU', startrow=start_row+1, header=False
+                                )
+                            
+                            # Limpar memória após cada lote
+                            gc.collect()
+                    else:
+                        # Para arquivos pequenos, salvar normalmente
+                        df_result.to_excel(writer, index=False, sheet_name='GDU')
                     
                     # Acessar o workbook e o worksheet para formatação
                     workbook = writer.book
@@ -274,9 +225,11 @@ def index():
                     for col_num, value in enumerate(df_result.columns.values):
                         worksheet.write(0, col_num, value, header_format)
                         
-                    # Ajustar largura das colunas
-                    for i, col in enumerate(df_result.columns):
-                        max_len = max(df_result[col].astype(str).map(len).max(), len(str(col))) + 2
+                    # Ajustar largura das colunas - somente para as primeiras 100 colunas para economizar tempo
+                    for i, col in enumerate(df_result.columns[:100]):
+                        # Calcular largura baseada apenas nas primeiras 100 linhas para economizar processamento
+                        sample = df_result.iloc[:100][col].astype(str) if len(df_result) > 100 else df_result[col].astype(str)
+                        max_len = max(sample.map(len).max(), len(str(col))) + 2
                         worksheet.set_column(i, i, max_len)
                 
                 # Adicionar à lista de arquivos processados
