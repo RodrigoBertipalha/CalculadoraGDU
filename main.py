@@ -125,7 +125,7 @@ def index():
                 df_result[f'{col_pfwd}_orig'] = df_result[col_pfwd].copy()
 
             # Processar cada linha do arquivo
-                for i, row in df.iterrows():
+            for i, row in df.iterrows():
                     try:
                         # Converter as datas para o processamento interno
                         data_plantio = pd.to_datetime(row[col_plantio], dayfirst=True, errors='coerce')
@@ -183,74 +183,74 @@ def index():
                             df_result.at[i, 'dias_pfwd'] = float('nan')
                             df_result.at[i, 'gdu_acumulado_pfwd'] = float('nan')
                         erros += 1
-                # Restaurar as colunas de datas originais para garantir que não sejam modificadas
-                try:
-                    df_result[col_plantio] = df_result[f'{col_plantio}_orig']
-                    df_result[col_sfwd] = df_result[f'{col_sfwd}_orig']
-                    if incluir_pfwd_atual and f'{col_pfwd}_orig' in df_result.columns:
-                        df_result[col_pfwd] = df_result[f'{col_pfwd}_orig']
-                    
-                    # Remover as colunas temporárias que não precisamos mais
-                    df_result = df_result.drop(columns=[f'{col_plantio}_orig', f'{col_sfwd}_orig'], errors='ignore')
-                    if incluir_pfwd_atual and f'{col_pfwd}_orig' in df_result.columns:
-                        df_result = df_result.drop(columns=[f'{col_pfwd}_orig'], errors='ignore')
-                    
-                    # Verificar se há algum GDU acumulado acima de 1200
-                    gdu_alto = df_result[pd.to_numeric(df_result['gdu_acumulado'], errors='coerce') > 1200].shape[0]
-                    gdu_pfwd_alto = 0
-                    if incluir_pfwd_atual and 'gdu_acumulado_pfwd' in df_result.columns:
-                        gdu_pfwd_alto = df_result[pd.to_numeric(df_result['gdu_acumulado_pfwd'], errors='coerce') > 1200].shape[0]
-                    
-                    arquivo_gdu_alto = gdu_alto + gdu_pfwd_alto
-                except Exception as e:
-                    print(f"Erro ao processar estatísticas do arquivo {original_filename}: {e}")
-                    arquivo_gdu_alto = 0
+            # Restaurar as colunas de datas originais para garantir que não sejam modificadas
+            try:
+                df_result[col_plantio] = df_result[f'{col_plantio}_orig']
+                df_result[col_sfwd] = df_result[f'{col_sfwd}_orig']
+                if incluir_pfwd_atual and f'{col_pfwd}_orig' in df_result.columns:
+                    df_result[col_pfwd] = df_result[f'{col_pfwd}_orig']
                 
-                total_gdu_alto += arquivo_gdu_alto
-                total_erros += erros
-                total_linhas_validas += linhas_validas
-                    
-                # Usa o nome original do arquivo para o resultado
-                output_filename = original_filename
-                output_path = os.path.join(RESULT_FOLDER, output_filename)
+                # Remover as colunas temporárias que não precisamos mais
+                df_result = df_result.drop(columns=[f'{col_plantio}_orig', f'{col_sfwd}_orig'], errors='ignore')
+                if incluir_pfwd_atual and f'{col_pfwd}_orig' in df_result.columns:
+                    df_result = df_result.drop(columns=[f'{col_pfwd}_orig'], errors='ignore')
                 
-                # Salvar o arquivo com formatação melhorada usando XlsxWriter
-                with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
-                    df_result.to_excel(writer, index=False, sheet_name='GDU')
-                    
-                    # Acessar o workbook e o worksheet para formatação
-                    workbook = writer.book
-                    worksheet = writer.sheets['GDU']
-                    
-                    # Definir formatos
-                    header_format = workbook.add_format({
-                        'bold': True,
-                        'bg_color': '#4facfe',
-                        'font_color': 'white',
-                        'border': 1
-                    })
-                    
-                    # Formatar cabeçalhos
-                    for col_num, value in enumerate(df_result.columns.values):
-                        worksheet.write(0, col_num, value, header_format)
-                        
-                    # Ajustar largura das colunas - somente para as primeiras 100 colunas para economizar tempo
-                    for i, col in enumerate(df_result.columns[:100]):
-                        # Calcular largura baseada apenas nas primeiras 100 linhas para economizar processamento
-                        sample = df_result.iloc[:100][col].astype(str) if len(df_result) > 100 else df_result[col].astype(str)
-                        max_len = max(sample.map(len).max(), len(str(col))) + 2
-                        worksheet.set_column(i, i, max_len)
+                # Verificar se há algum GDU acumulado acima de 1200
+                gdu_alto = df_result[pd.to_numeric(df_result['gdu_acumulado'], errors='coerce') > 1200].shape[0]
+                gdu_pfwd_alto = 0
+                if incluir_pfwd_atual and 'gdu_acumulado_pfwd' in df_result.columns:
+                    gdu_pfwd_alto = df_result[pd.to_numeric(df_result['gdu_acumulado_pfwd'], errors='coerce') > 1200].shape[0]
                 
-                # Adicionar à lista de arquivos processados
-                processed_filenames.append(output_filename)
-                print(f"Arquivo {original_filename} processado com sucesso e adicionado à lista.")
-                
-                # Forçar coleta de lixo após processamento completo do arquivo
-                gc.collect()
-                
+                arquivo_gdu_alto = gdu_alto + gdu_pfwd_alto
             except Exception as e:
-                print(f"Erro ao finalizar o processamento do arquivo {original_filename}: {e}")
-                continue
+                print(f"Erro ao processar estatísticas do arquivo {original_filename}: {e}")
+                arquivo_gdu_alto = 0
+                
+            total_gdu_alto += arquivo_gdu_alto
+            total_erros += erros
+            total_linhas_validas += linhas_validas
+                
+            # Usa o nome original do arquivo para o resultado
+            output_filename = original_filename
+            output_path = os.path.join(RESULT_FOLDER, output_filename)
+            
+            # Salvar o arquivo com formatação melhorada usando XlsxWriter
+            with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
+                df_result.to_excel(writer, index=False, sheet_name='GDU')
+                
+                # Acessar o workbook e o worksheet para formatação
+                workbook = writer.book
+                worksheet = writer.sheets['GDU']
+                
+                # Definir formatos
+                header_format = workbook.add_format({
+                    'bold': True,
+                    'bg_color': '#4facfe',
+                    'font_color': 'white',
+                    'border': 1
+                })
+                
+                # Formatar cabeçalhos
+                for col_num, value in enumerate(df_result.columns.values):
+                    worksheet.write(0, col_num, value, header_format)
+                    
+                # Ajustar largura das colunas - somente para as primeiras 100 colunas para economizar tempo
+                for i, col in enumerate(df_result.columns[:100]):
+                    # Calcular largura baseada apenas nas primeiras 100 linhas para economizar processamento
+                    sample = df_result.iloc[:100][col].astype(str) if len(df_result) > 100 else df_result[col].astype(str)
+                    max_len = max(sample.map(len).max(), len(str(col))) + 2
+                    worksheet.set_column(i, i, max_len)
+                
+            # Adicionar à lista de arquivos processados
+            processed_filenames.append(output_filename)
+            print(f"Arquivo {original_filename} processado com sucesso e adicionado à lista.")
+            
+            # Forçar coleta de lixo após processamento completo do arquivo
+            gc.collect()
+            
+        except Exception as e:
+            print(f"Erro ao finalizar o processamento do arquivo {original_filename}: {e}")
+            continue
 
         # Determina a mensagem de status para todos os arquivos processados
         num_files = len(processed_filenames)
