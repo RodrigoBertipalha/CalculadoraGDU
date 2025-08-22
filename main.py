@@ -7,6 +7,26 @@ import shutil
 import time
 import threading
 from pathlib import Path
+import gc
+
+# Configuração para limitar uso de memória
+os.environ["OPENPYXL_NOTHREADED"] = "1"  # Desativa threads do openpyxl
+os.environ["OMP_NUM_THREADS"] = "1"      # Limita threads OpenMP
+os.environ["NUMEXPR_MAX_THREADS"] = "1"  # Limita threads NumExpr
+
+# Configurações pandas para usar menos memória
+pd.options.mode.chained_assignment = None
+# Diminuir o tamanho do pool de strings
+if hasattr(pd.options.mode, 'string_storage'):
+    pd.options.mode.string_storage = 'python'
+
+try:
+    # Tenta importar e iniciar o monitor de memória em produção
+    from memory_profile import init_memory_monitor
+    init_memory_monitor()
+    print("Monitor de memória iniciado")
+except ImportError:
+    print("Monitor de memória não disponível (psutil pode estar faltando)")
 
 app = Flask(__name__)
 app.secret_key = 'segredo'
@@ -93,12 +113,28 @@ def index():
                 if file_size_kb > 800:
                     print(f"AVISO: O arquivo {original_filename} tem {file_size_kb:.2f}KB e pode causar timeout no processamento")
                 
-                # Otimizar leitura de planilhas para usar menos memória
+                # Configurar Pandas para usar menos memória
+                import pandas as pd
+                import numpy as np
+                # Desabilitar a thread paralela do openpyxl para reduzir uso de memória
+                os.environ["OPENPYXL_NOTHREADED"] = "1"
+                
+                # Otimizar leitura de planilhas para usar muito menos memória
                 df = pd.read_excel(
                     filepath,
-                    engine='openpyxl'  # O motor openpyxl é geralmente mais eficiente em memória
+                    engine='openpyxl',
+                    # Otimizações para reduzir drasticamente o uso de memória
+                    dtype_backend='numpy_nullable',
+                    na_values=['NA', 'N/A', 'n/a', 'na', '', 'null', 'NULL', 'None', 'none'],
+                    keep_default_na=False
                 )
-                df_result = df.copy()
+                
+                # Convertendo colunas para tipo de dados mais eficientes
+                for col in df.select_dtypes(include=['object']).columns:
+                    # Tenta converter para categoria, que usa muito menos memória
+                    df[col] = df[col].astype('category')
+                
+                df_result = df.copy(deep=False)  # Usar referência ao invés de cópia profunda quando possível
                 erros = 0
                 linhas_validas = 0
                 
