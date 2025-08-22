@@ -1,29 +1,7 @@
-import os
-import sys
-import traceback
+from main import app
 
-# Configuração para reduzir uso de memória
-os.environ["OPENPYXL_NOTHREADED"] = "1"  # Desativa threads do openpyxl
-os.environ["OMP_NUM_THREADS"] = "1"      # Limita threads OpenMP
-os.environ["NUMEXPR_MAX_THREADS"] = "1"  # Limita threads NumExpr
-
-try:
-    print("Inicializando aplicação...")
-    from main import app, clean_all_files
-    
-    # Limpa arquivos antigos na inicialização
-    print("Limpando arquivos antigos...")
-    clean_all_files()
-    
-    # Configurações para melhorar desempenho em produção
-    if os.environ.get('PYTHONOPTIMIZE', '0') == '1':
-        print("Rodando em modo de produção otimizado")
-except Exception as e:
-    print("ERRO CRÍTICO NA INICIALIZAÇÃO:")
-    print(str(e))
-    print("Traceback completo:")
-    traceback.print_exc()
-    # Não levanta exceção aqui para permitir que o gunicorn continue
+if __name__ == "__main__":
+    app.run()
 
 # Configurações para reduzir uso de memória no pandas/numpy
 try:
