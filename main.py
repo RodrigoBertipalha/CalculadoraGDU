@@ -123,27 +123,26 @@ def index():
                 # Leitura do arquivo Excel com otimização máxima de memória
                 print(f"Lendo arquivo {original_filename} com otimização de memória...")
                 
-                # Verificar tamanho e usar leitura em chunks se for muito grande
+                # Verificar tamanho e usar otimização de tipos de dados se for muito grande
                 if file_size_kb > 250:  # Se for maior que 250KB
                     print(f"Arquivo grande detectado ({file_size_kb:.2f}KB). Usando leitura otimizada...")
-                    # Primeiro ler só o cabeçalho para obter as colunas
-                    header_df = pd.read_excel(filepath, engine='openpyxl', nrows=0)
-                    dtypes = {col: 'object' for col in header_df.columns}
                     
-                    # Ler em chunks para economizar memória
-                    chunk_size = 1000
-                    chunks = []
-                    for chunk in pd.read_excel(filepath, engine='openpyxl', chunksize=chunk_size, dtype=dtypes):
-                        for col in chunk.columns:
-                            if chunk[col].dtype == 'float64':
-                                chunk[col] = pd.to_numeric(chunk[col], downcast='float')
-                            elif chunk[col].dtype == 'int64':
-                                chunk[col] = pd.to_numeric(chunk[col], downcast='integer')
-                        chunks.append(chunk)
-                        gc.collect(generation=2)
+                    # Ler o arquivo de uma vez, mas otimizar memória depois
+                    df = pd.read_excel(filepath, engine='openpyxl')
                     
-                    df = pd.concat(chunks)
-                    del chunks
+                    # Otimizar uso de memória convertendo tipos de dados
+                    for col in df.columns:
+                        if df[col].dtype == 'float64':
+                            df[col] = pd.to_numeric(df[col], downcast='float')
+                        elif df[col].dtype == 'int64':
+                            df[col] = pd.to_numeric(df[col], downcast='integer')
+                        elif df[col].dtype == 'object':
+                            # Converter colunas de texto para categoria quando apropriado
+                            if len(df) > 0 and df[col].nunique() < len(df) / 2:  # Se tiver repetições significativas
+                                df[col] = df[col].astype('category')
+                                
+                    # Forçar liberação de memória
+                    gc.collect(generation=2)
                 else:
                     # Para arquivos menores, leitura normal
                     df = pd.read_excel(filepath, engine='openpyxl')
