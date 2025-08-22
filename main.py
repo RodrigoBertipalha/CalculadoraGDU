@@ -247,10 +247,6 @@ def index():
             
             # Forçar coleta de lixo após processamento completo do arquivo
             gc.collect()
-            
-        except Exception as e:
-            print(f"Erro ao finalizar o processamento do arquivo {original_filename}: {e}")
-            continue
 
         # Determina a mensagem de status para todos os arquivos processados
         num_files = len(processed_filenames)
