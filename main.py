@@ -75,18 +75,37 @@ else:
     # Fallback: calcular a partir de temp_min e temp_max para compatibilidade
     clima_df['gdu_diario'] = ((clima_df.get('temp_min', 0) + clima_df.get('temp_max', 0)) / 2) - 10
 
-clima_gdu_dict = {}
-for _, row in clima_df.iterrows():
-    # garantir que data e valor existam
-    data_val = row.get('data', None)
-    gdu_val = row.get('gdu_diario', None)
-    try:
-        if pd.isna(data_val) or pd.isna(gdu_val):
+# Construir uma Series diária e seu prefix sum para consultas O(1)
+clima_gdu_prefix = None
+try:
+    # remover linhas sem data ou sem gdu
+    clima_df = clima_df.dropna(subset=['data', 'gdu_diario'])
+    clima_df['date_only'] = pd.to_datetime(clima_df['data'].dt.date)
+    clima_gdu_series = pd.Series(clima_df['gdu_diario'].values, index=clima_df['date_only'])
+    clima_gdu_series = clima_gdu_series.sort_index()
+    # garantir série contínua no intervalo com 0.0 onde faltar data
+    full_idx = pd.date_range(clima_gdu_series.index.min(), clima_gdu_series.index.max(), freq='D')
+    clima_gdu_series = clima_gdu_series.reindex(full_idx, fill_value=0.0)
+    # prefix sum para consultas rápidas de intervalo
+    clima_gdu_prefix = clima_gdu_series.cumsum()
+    # liberar memória de estruturas temporárias
+    del clima_gdu_series
+    gc.collect()
+    print("Clima indexado e prefix sum calculado para consulta rápida.")
+except Exception as e:
+    print(f"Falha ao preparar prefix sum do clima: {e}")
+    # fallback: construir dicionário
+    clima_gdu_dict = {}
+    for _, row in clima_df.iterrows():
+        data_val = row.get('data', None)
+        gdu_val = row.get('gdu_diario', None)
+        try:
+            if pd.isna(data_val) or pd.isna(gdu_val):
+                continue
+            chave = data_val.date()
+        except Exception:
             continue
-        chave = data_val.date()
-    except Exception:
-        continue
-    clima_gdu_dict[chave] = float(gdu_val)
+        clima_gdu_dict[chave] = float(gdu_val)
 
 # Otimizar o cálculo de GDU
 def calcular_gdu_rapido(data_inicio, data_fim):
@@ -95,16 +114,60 @@ def calcular_gdu_rapido(data_inicio, data_fim):
         return float('nan')
     # iniciar a contagem a partir de um dia depois da data de plantio
     # (o usuário pediu que o período comece em plantio + 1 dia)
-    data_atual = (data_inicio.date() + datetime.timedelta(days=1))
-    data_fim = data_fim.date()
-    gdu_acumulado = 0
-    
-    while data_atual <= data_fim:
-        if data_atual in clima_gdu_dict:
-            gdu_acumulado += clima_gdu_dict[data_atual]
-        data_atual += datetime.timedelta(days=1)
-    
-    return round(gdu_acumulado, 2)
+    start_date = (pd.to_datetime(data_inicio).date() + datetime.timedelta(days=1))
+    end_date = pd.to_datetime(data_fim).date()
+
+    # se intervalo inválido
+    if end_date < start_date:
+        return 0.0
+
+    # usar prefix sum quando disponível
+    if clima_gdu_prefix is not None:
+        try:
+            start_ts = pd.Timestamp(start_date)
+            end_ts = pd.Timestamp(end_date)
+            idx_min = clima_gdu_prefix.index.min()
+            idx_max = clima_gdu_prefix.index.max()
+
+            if end_ts < idx_min or start_ts > idx_max:
+                return 0.0
+
+            start_clamped = max(start_ts, idx_min)
+            end_clamped = min(end_ts, idx_max)
+
+            sum_end = clima_gdu_prefix.get(end_clamped, 0.0)
+            prev_day = start_clamped - pd.Timedelta(days=1)
+            sum_prev = clima_gdu_prefix.get(prev_day, 0.0)
+
+            resultado = float(sum_end) - float(sum_prev)
+            return round(resultado, 2)
+        except Exception:
+            pass
+
+    # fallback para dicionário ou iteração
+    gdu_acumulado = 0.0
+    data_atual = start_date
+    # se clima_gdu_dict existir, use-o
+    if 'clima_gdu_dict' in globals():
+        while data_atual <= end_date:
+            if data_atual in clima_gdu_dict:
+                gdu_acumulado += clima_gdu_dict[data_atual]
+            data_atual += datetime.timedelta(days=1)
+        return round(gdu_acumulado, 2)
+
+    # último fallback: tentar somar pela leitura direta do dataframe
+    try:
+        tmp_sum = 0.0
+        cur = pd.to_datetime(start_date)
+        while cur.date() <= end_date:
+            try:
+                tmp_sum += float(clima_df.loc[clima_df['data'].dt.date == cur.date(), 'gdu_diario'].sum())
+            except Exception:
+                pass
+            cur += datetime.timedelta(days=1)
+        return round(tmp_sum, 2)
+    except Exception:
+        return 0.0
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
