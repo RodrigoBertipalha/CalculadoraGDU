@@ -535,6 +535,19 @@ def clean_all_files():
         except Exception as e:
             print(f"Erro ao limpar diretório {directory}: {e}")
 
+
+@app.route('/health')
+def health():
+    return 'ok', 200
+
+
+@app.route('/ready')
+def ready():
+    # Simple readiness - verifica se clima_gdu_prefix foi criado
+    if 'clima_gdu_prefix' in globals() and clima_gdu_prefix is not None:
+        return 'ready', 200
+    return 'not ready', 503
+
 if __name__ == '__main__':
     # Limpa todos os arquivos temporários na inicialização
     clean_all_files()
