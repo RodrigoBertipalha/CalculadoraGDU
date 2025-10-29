@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, send_file, flash, after_this_request
+from flask import Flask, render_template, request, send_file, flash, after_this_request, jsonify
 import pandas as pd
 import os
 import xlsxwriter
@@ -496,6 +496,24 @@ def download(filename):
         return response
     
     return send_file(output_path, as_attachment=True)
+
+
+@app.route('/quick_calc', methods=['POST'])
+def quick_calc():
+    """Endpoint AJAX para calcular GDU rápido sem upload de planilha.
+    Recebe 'plantio' e 'sfwd' (form ou json) e retorna JSON {gdu: float} ou {error: msg}.
+    """
+    data = request.get_json(silent=True) or request.form
+    plantio_raw = data.get('plantio', '')
+    sfwd_raw = data.get('sfwd', '')
+
+    p = pd.to_datetime(plantio_raw, dayfirst=True, errors='coerce')
+    f = pd.to_datetime(sfwd_raw, dayfirst=True, errors='coerce')
+    if pd.isna(p) or pd.isna(f):
+        return jsonify({'error': 'Datas inválidas'}), 400
+
+    gdu = calcular_gdu_rapido(p, f)
+    return jsonify({'gdu': gdu})
 
 # Função que limpa todos os arquivos nos diretórios (exceto .gitkeep)
 def clean_all_files():

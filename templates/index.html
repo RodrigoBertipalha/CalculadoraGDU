@@ -573,6 +573,35 @@
           </button>
         </div>
       </form>
+
+      <!-- Card: Cálculo manual rápido -->
+      <div class="section" id="manual-card">
+        <h3>
+          <span class="section-icon">⚡</span>
+          Cálculo rápido (sem upload)
+        </h3>
+        <p>Insira uma data de plantio e outra de florescimento para obter o GDU (plantio+1 até florescimento).</p>
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <div style="flex:1; min-width:200px;">
+            <label>Data de Plantio (dd/mm/aaaa)</label>
+            <input id="manual-plantio" placeholder="01/09/2025" />
+          </div>
+          <div style="flex:1; min-width:200px;">
+            <label>Data de Florescimento (dd/mm/aaaa)</label>
+            <input id="manual-sfwd" placeholder="05/09/2025" />
+          </div>
+          <div style="align-self:center;">
+            <button id="manual-calc-btn" class="calculate-btn" type="button">Calcular</button>
+          </div>
+        </div>
+
+        <div id="manual-result" style="margin-top:12px; display:none;">
+          <div style="padding:12px; background:#f4f4f4; border-radius:8px;">
+            <strong>GDU:</strong> <span id="manual-result-value"></span>
+            <div style="margin-top:8px"><input id="manual-copy" readonly style="width:120px" onclick="this.select()" /></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -666,6 +695,36 @@
         closeModal();
       }
     }
+
+    // Manual quick calc
+    document.addEventListener('DOMContentLoaded', function(){
+      const btn = document.getElementById('manual-calc-btn');
+      if (!btn) return;
+      btn.addEventListener('click', async function(){
+        const plantio = document.getElementById('manual-plantio').value.trim();
+        const sfwd = document.getElementById('manual-sfwd').value.trim();
+        const resultDiv = document.getElementById('manual-result');
+        const resultVal = document.getElementById('manual-result-value');
+        const copyInput = document.getElementById('manual-copy');
+        resultDiv.style.display = 'none';
+        try {
+          const resp = await fetch('/quick_calc', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plantio, sfwd })
+          });
+          const data = await resp.json();
+          if (!resp.ok) throw new Error(data.error || 'Erro');
+          resultVal.textContent = data.gdu;
+          copyInput.value = data.gdu;
+          resultDiv.style.display = 'block';
+        } catch (err) {
+          resultVal.textContent = 'Erro: ' + (err.message || 'datas inválidas');
+          copyInput.value = '';
+          resultDiv.style.display = 'block';
+        }
+      });
+    });
   </script>
 </body>
 </html>
