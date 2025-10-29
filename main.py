@@ -67,18 +67,35 @@ clima_df['data'] = pd.to_datetime(clima_df['data'], dayfirst=True)
 # Otimizar clima_df para consulta rápida
 print("Otimizando clima_df para consulta rápida...")
 # Pré-calcular GDU diário e indexar por data
-clima_df['gdu_diario'] = ((clima_df['temp_min'] + clima_df['temp_max']) / 2) - 10
+# Preferir coluna 'GDU_dia' da base climática quando disponível (evita recálculo)
+if 'GDU_dia' in clima_df.columns:
+    clima_df['gdu_diario'] = pd.to_numeric(clima_df['GDU_dia'], errors='coerce')
+    print("Usando coluna 'GDU_dia' da base climática para cálculo de GDU diário.")
+else:
+    # Fallback: calcular a partir de temp_min e temp_max para compatibilidade
+    clima_df['gdu_diario'] = ((clima_df.get('temp_min', 0) + clima_df.get('temp_max', 0)) / 2) - 10
+
 clima_gdu_dict = {}
 for _, row in clima_df.iterrows():
-    clima_gdu_dict[row['data'].date()] = row['gdu_diario']
+    # garantir que data e valor existam
+    data_val = row.get('data', None)
+    gdu_val = row.get('gdu_diario', None)
+    try:
+        if pd.isna(data_val) or pd.isna(gdu_val):
+            continue
+        chave = data_val.date()
+    except Exception:
+        continue
+    clima_gdu_dict[chave] = float(gdu_val)
 
 # Otimizar o cálculo de GDU
 def calcular_gdu_rapido(data_inicio, data_fim):
     """Calcula o GDU de forma otimizada entre duas datas"""
     if pd.isna(data_inicio) or pd.isna(data_fim):
         return float('nan')
-    
-    data_atual = data_inicio.date()
+    # iniciar a contagem a partir de um dia depois da data de plantio
+    # (o usuário pediu que o período comece em plantio + 1 dia)
+    data_atual = (data_inicio.date() + datetime.timedelta(days=1))
     data_fim = data_fim.date()
     gdu_acumulado = 0
     
